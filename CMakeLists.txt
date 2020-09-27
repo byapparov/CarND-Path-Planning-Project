@@ -18,6 +18,17 @@ link_directories(/usr/local/lib)
 link_directories(/usr/local/opt/openssl/lib)
 link_directories(/usr/local/Cellar/libuv/1.11.0/lib)
 
+
+find_package(Catch2 REQUIRED)
+
+
+add_executable(test_helpers 
+  test_helpers.cpp)
+
+include(CTest)
+include(Catch)
+catch_discover_tests(test_helpers)
+
 endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin") 
 
 
