@@ -1,6 +1,8 @@
 #include <vector>
 #include "helpers.h"
 #include "spline.h"
+#include "trajectory_cost.h"
+#include "vehicle_states.h"
 
 using std::vector;
 
@@ -46,23 +48,8 @@ double frenet_distance(double car_s, double object_s, double max_s) {
 }
 
 
-int fastests_lane(double car_s, std::vector<std::vector<double>> sensor_fusion) {
-  for (int i = 0; i < sensor_fusion.size(); i ++) {
-    return -1; 
-  }
-}
 
 
-/**
- * Possible states of the vehicle in the high way traffic mode
- */
-enum class VehicleState {
-  LCL,  // lane change left
-  PLCL, // prepare lane change left
-  KL,   // keep lane
-  PLCR, // prepare lane change right
-  LCR   // lane change right
-};
 
 double lane_speed_cost(double target_speed, double next_car_speed) {
   if (next_car_speed >= target_speed) {
@@ -73,37 +60,31 @@ double lane_speed_cost(double target_speed, double next_car_speed) {
   }
 }
 
-double car_speed_cost(double target_speed, double car_speed) {
-  if (car_speed > target_speed) {
-    return 1;
-  }
-  else {
-    return (target_speed - car_speed) / target_speed;  
-  }
-}
+
 
 class Vehicle {
   
 public:
-  Vehicle(int lane, double speed, double target_velocity);
-    
-  std::vector<VehicleState> possible_next_states();
+  Vehicle(int lane, double speed, double target_velocity,
+          vector<double> map_waypoints_s, 
+          vector<double> map_waypoints_x, 
+          vector<double> map_waypoints_y);
   
   void Accelerate();
+  
+  void SwitchState(vector<vector <double> > sensor_fusion);
   double ReferenceSpeed();
-  void Update(double x, double y, double yaw, 
+  void Update(double x, double y, double yaw, double car_speed,
               double s, double d, 
               std::vector<double> previous_path_x, std::vector<double> previous_path_y,
               double ref_s, double ref_d);
   
-  vector<vector<double> > Trajectory(int target_line, 
-                                     vector<double> map_waypoints_s, 
-                                    vector<double> map_waypoints_x, 
-                                    vector<double> map_waypoints_y);
+  vector<vector<double> > Trajectory();
   
   
 private:
-  int lane; // final lane
+  int lane; // final target lane
+  int trajectory_size;
   double car_x, car_y, car_yaw;
   double car_d, car_s;
   double speed;
@@ -117,18 +98,33 @@ private:
   vector<double> trajectory_x;
   vector<double> trajectory_y;
   
+  // Map
+  vector<double> map_waypoints_s;
+  vector<double> map_waypoints_x; 
+  vector<double> map_waypoints_y;
+  
+  
+  vector<vector<double> > compute_trajectory(int target_lane, double distance, int size);
+  
 };
 
 /**
  * Vehicle initialiser
  */
-Vehicle::Vehicle(int lane, double speed, double target_speed)  {
+Vehicle::Vehicle(int lane, double speed, double target_speed,
+                 vector<double> map_waypoints_s, 
+                 vector<double> map_waypoints_x, 
+                 vector<double> map_waypoints_y)  {
   this->lane = lane;
   this->speed = speed;
   this->state = VehicleState::KL;
   this->reference_speed = speed;
   this->target_speed = target_speed;
   delta_t = .02;
+  this->trajectory_size = 50;
+  this->map_waypoints_s = map_waypoints_s;
+  this->map_waypoints_x = map_waypoints_x;
+  this->map_waypoints_y = map_waypoints_y;
 }
 
 /**
@@ -140,7 +136,7 @@ Vehicle::Vehicle(int lane, double speed, double target_speed)  {
  * previous_path_x - x poins left from the previous trajectory
  * previous_path_y - y poins left from the previous trajectory
  */
-void Vehicle::Update(double x, double y, double yaw, 
+void Vehicle::Update(double x, double y, double yaw, double car_speed,
                      double s, double d, 
                      vector<double> previous_path_x, vector<double> previous_path_y,
                      double ref_s, double ref_d) {
@@ -150,7 +146,7 @@ void Vehicle::Update(double x, double y, double yaw,
   car_yaw = yaw;
   car_s = s;
   car_d = d;
-
+  this->speed = car_speed;
   
   trajectory_x.clear();
   trajectory_y.clear();
@@ -197,36 +193,59 @@ void Vehicle::Accelerate() {
   }
 }
 
+void Vehicle::SwitchState(vector<vector <double> > sensor_fusion) {
+  std::cout << "Switching veichle state" << std::endl;
+
+  vector<vector<double> > trajectory;
+  VehicleState optimal_state;
+  vector<double> ref_point, ref_point_prev;
+  double cost, trajectory_cost_min = -1;
+
+  
+  if (this->speed < 30) {
+    this->state = VehicleState::KL;
+    return;
+  }
+  
+  vector<VehicleState> states = possible_next_states(this->state);
+  VehicleState next_state;
+  for (int i = 0; i < states.size(); i++) {
+    next_state = states[i];
+    int final_lane = get_final_lane(lane, next_state);
+    
+    std::cout << "Experimental target lane: " << final_lane << ", for state: " << label_vehicle_state(next_state) << std::endl;
+    vector<vector<double> > trajectory = this->compute_trajectory(final_lane, 50, 100);
+
+    double dt = trajectory_x.size() * this->delta_t;
+    cost = trajectory_cost(trajectory, this->ref_d, 
+                                      target_speed, dt, sensor_fusion,     
+                                      this->map_waypoints_x, 
+                                      this->map_waypoints_y);
+    
+    if (cost < trajectory_cost_min || trajectory_cost_min < 0) {
+      trajectory_cost_min = cost;
+      optimal_state = next_state;
+    }
+  }
+    
+  std::cout << "New optimal state: " << label_vehicle_state(optimal_state) << std::endl;
+    
+    
+  this->state = optimal_state;
+  this->lane = get_final_lane(this->lane, this->state);
+  
+  std::cout << "New target lane: " << this->lane << std::endl;
+  std::cout << "Trajectory min cost: " << trajectory_cost_min << std::endl;
+  
+}
+
 double Vehicle::ReferenceSpeed() {
   return reference_speed;
 }
 
-/**
- * Possible states that vehicle can transit to from the current state
- */
-std::vector<VehicleState> Vehicle::possible_next_states() {
-  
-  std::vector<VehicleState> states;
-  states.push_back(VehicleState::KL);
-  if (this->state == VehicleState::KL) {
-    states.push_back(VehicleState::PLCL);
-    states.push_back(VehicleState::PLCR);
-  } 
-  else if (this->state == VehicleState::PLCL) {
-    states.push_back(VehicleState::PLCL);
-    states.push_back(VehicleState::LCL);
-  }
-  else if (this->state == VehicleState::PLCR) {
-    states.push_back(VehicleState::PLCR);
-    states.push_back(VehicleState::LCR);
-  }
-  return states;
-}
 
-std::vector<std::vector<double> > Vehicle::Trajectory(int target_lane, 
-                                                     vector<double> map_waypoints_s, 
-                                                     vector<double> map_waypoints_x, 
-                                                     vector<double> map_waypoints_y) {
+
+vector<vector<double> > Vehicle::compute_trajectory(int target_lane, double distance, int size) {
   vector<double> sx, sy; // points that define spline
   
   
@@ -238,38 +257,46 @@ std::vector<std::vector<double> > Vehicle::Trajectory(int target_lane,
   sx.push_back(ref_x);
   sy.push_back(ref_y);
   
-  // std::cout << "Target lane: " << lane << ", d value: "<< lane_number_to_frenet(lane) << std::endl;
+  std::cout << "Generating Trajectory for Target Lane: " << target_lane << ", d value: "<< lane_number_to_frenet(target_lane) << std::endl;
   // std::cout << "Reference point yaw: " << ref_yaw << std::endl;
-  // std::cout << "Reference point d: " << ref_d << std::endl;
-  // std::cout << "Reference point s: " << ref_s << std::endl;
+  std::cout << "Reference point d: " << ref_d << std::endl;
+  std::cout << "Reference point s: " << ref_s << std::endl;
   
   vector<double> next_wp0 = getXY(
-    ref_s + 10, 
-    lane_number_to_frenet(target_lane), 
+    ref_s + 5, 
+    (lane_number_to_frenet(target_lane)) , 
     map_waypoints_s, 
     map_waypoints_x, 
     map_waypoints_y
   );
   
   vector<double> next_wp1 = getXY(
-    ref_s + 15, 
-    lane_number_to_frenet(target_lane), 
+    ref_s + 10, 
+    (lane_number_to_frenet(target_lane)), 
     map_waypoints_s, 
     map_waypoints_x, 
     map_waypoints_y
   );
   
   vector<double> next_wp2 = getXY(
-    ref_s + 25, 
-    lane_number_to_frenet(target_lane), 
+    ref_s + 20, 
+    (lane_number_to_frenet(target_lane)), 
     map_waypoints_s, 
     map_waypoints_x, 
     map_waypoints_y
   );
   
   vector<double> next_wp3 = getXY(
-    ref_s + 45, 
+    ref_s + 40, 
     lane_number_to_frenet(target_lane), 
+    map_waypoints_s, 
+    map_waypoints_x, 
+    map_waypoints_y
+  );
+  
+  vector<double> next_wp4 = getXY(
+    ref_s + 60, 
+    (lane_number_to_frenet(target_lane)), 
     map_waypoints_s, 
     map_waypoints_x, 
     map_waypoints_y
@@ -280,13 +307,13 @@ std::vector<std::vector<double> > Vehicle::Trajectory(int target_lane,
   sx.push_back(next_wp1[0]);
   sx.push_back(next_wp2[0]);
   sx.push_back(next_wp3[0]);
+  sx.push_back(next_wp4[0]);
   
   sy.push_back(next_wp0[1]);
   sy.push_back(next_wp1[1]);
   sy.push_back(next_wp2[1]);
   sy.push_back(next_wp3[1]);
-  
-  std::cout << "Initial points in car coordinates" << std::endl;
+  sy.push_back(next_wp4[1]);
   
   vector<double> vx, vy; // veichle coordinates
   for(int i = 0; i < sx.size(); i++) {
@@ -297,8 +324,7 @@ std::vector<std::vector<double> > Vehicle::Trajectory(int target_lane,
     vx.push_back((shift_x * cos(0 - ref_yaw) - shift_y * sin(0 - ref_yaw)));
     vy.push_back((shift_x * sin(-ref_yaw) + shift_y * cos(-ref_yaw)));
     
-    // std::cout << "Point x, y : (" << vx[i] << ", " << vy[i] << ")" << std::endl;
-    
+    // std::cout << "Point in car coordinates x, y : (" << vx[i] << ", " << vy[i] << ")" << std::endl;
   }
   
   tk::spline s;
@@ -307,7 +333,7 @@ std::vector<std::vector<double> > Vehicle::Trajectory(int target_lane,
   
   s.set_points(vx, vy);
   
-  double target_x = 30;
+  double target_x = distance;
   double target_y = s(target_x);
   double target_dist = sqrt(target_x * target_x + target_y * target_y);
   
@@ -315,10 +341,12 @@ std::vector<std::vector<double> > Vehicle::Trajectory(int target_lane,
   
   double N = target_dist / trajectory_step;
   
+  // copy current trajectory, so it is not
+  // changed by experimental calculations
+  vector<double> new_x = trajectory_x;
+  vector<double> new_y = trajectory_y;
   
-  for (int i = 1; i <= 50 - trajectory_x.size(); ++i) {
-    
-    
+  for (int i = 1; i <= size - new_x.size(); ++i) {
     double x = x_add_on + target_x / N;
     double y = s(x);
     
@@ -330,14 +358,18 @@ std::vector<std::vector<double> > Vehicle::Trajectory(int target_lane,
     x += ref_x;
     y += ref_y;
     
-    
-    trajectory_x.push_back(x);
-    trajectory_y.push_back(y);
+    new_x.push_back(x);
+    new_y.push_back(y);
   }
   
   std::vector<std::vector<double> > trajectory;
   
-  trajectory.push_back(trajectory_x);
-  trajectory.push_back(trajectory_y);
+  trajectory.push_back(new_x);
+  trajectory.push_back(new_y);
+  std::cout << "New trajectory xy tail: " << new_x[new_x.size() -1 ] << "," << new_x[new_y.size() -1 ] << std::endl;
   return trajectory;
+}
+
+std::vector<std::vector<double> > Vehicle::Trajectory() {
+  return this->compute_trajectory(lane, 30.0, this->trajectory_size);
 }

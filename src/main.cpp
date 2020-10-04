@@ -52,7 +52,10 @@ int main() {
     map_waypoints_dy.push_back(d_y);
   }
   
-  Vehicle vehicle(1, 0.0, 47.5);
+  Vehicle vehicle(1, 0.0, 47.5,
+                  map_waypoints_s, 
+                  map_waypoints_x, 
+                  map_waypoints_y);
   
   h.onMessage([&vehicle,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
                &map_waypoints_dx,&map_waypoints_dy]
@@ -102,18 +105,17 @@ int main() {
            *   sequentially every .02 seconds
            */
           
-          vehicle.Accelerate(); // 5 m / ss
-          
-          vehicle.Update(car_x, car_y, deg2rad(car_yaw), 
+          vehicle.Update(car_x, car_y, deg2rad(car_yaw), car_speed,
                          car_s, car_d,
                          previous_path_x, previous_path_y,
                          end_path_s, end_path_d);
+        
+          vehicle.Accelerate(); // 5 m / ss
+        
+          vehicle.SwitchState(sensor_fusion);
           
           vector<vector<double>> trajectory;
-          trajectory = vehicle.Trajectory(1, 
-            map_waypoints_s, 
-            map_waypoints_x, 
-            map_waypoints_y);
+          trajectory = vehicle.Trajectory();
         
           next_x_vals = trajectory[0];
           next_y_vals = trajectory[1];
