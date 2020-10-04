@@ -52,7 +52,7 @@ int main() {
     map_waypoints_dy.push_back(d_y);
   }
   
-  Vehicle vehicle(1, 0.0, 47.5,
+  Vehicle vehicle(1, 0.0, 47.5 / 2.23,
                   map_waypoints_s, 
                   map_waypoints_x, 
                   map_waypoints_y);
@@ -109,9 +109,7 @@ int main() {
                          car_s, car_d,
                          previous_path_x, previous_path_y,
                          end_path_s, end_path_d);
-        
-          vehicle.Accelerate(); // 5 m / ss
-        
+
           vehicle.SwitchState(sensor_fusion);
           
           vector<vector<double>> trajectory;
