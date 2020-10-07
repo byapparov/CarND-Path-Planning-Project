@@ -2,6 +2,7 @@
 #include "catch.hpp"
 #include "lanes_state_machine.h"
 
+
 TEST_CASE( "Can calculate lane number correctly", "[frenet_to_lane_number]") {
   REQUIRE( frenet_to_lane_number(1.0) == 0 );
   REQUIRE( frenet_to_lane_number(2.0) == 0 );
@@ -227,4 +228,33 @@ TEST_CASE ( "Prediction of based on sensor fusion is correct", "[predict_sensor_
   REQUIRE ( prediction[1][1] == 10.5);
   REQUIRE ( prediction[1][2] == 2); // we don't predict lanes
   
+}
+
+TEST_CASE ( "Map related transformations are correct", "[map_test]") {
+  
+  vector<double> res = LocalCoordinates(1970, 1190, atan2(1, 0), 1970, 1190);
+  
+  // Same point returns zero point
+  REQUIRE ( res[0] == 0);
+  REQUIRE ( res[1] == 0);
+  
+  res = LocalCoordinates(1970, 1190, atan2(0, 1), 1980, 1190);
+  REQUIRE ( Approx(res[0]) == 10);
+  REQUIRE ( Approx(res[1]) == 0);
+  
+  res = LocalCoordinates(1970, 1190, atan2(1, 0), 1980, 1190);
+  REQUIRE ( res[1] == Approx(-10.0));
+  
+  
+  res = LocalCoordinates(1970, 1190, atan2(1, 0), 1970, 1200);
+  REQUIRE ( res[0] == Approx(10.0));
+  
+  res = GlobalCoordinates(1970, 1190, atan2(1, 0), 10, 0);
+  REQUIRE ( res[0] == Approx(1970));
+  REQUIRE ( res[1] == Approx(1200));
+  
+  
+  res = GlobalCoordinates(1970, 1190, atan2(0, -1), 10, 0);
+  REQUIRE ( res[0] == Approx(1960));
+  REQUIRE ( res[1] == Approx(1190));
 }

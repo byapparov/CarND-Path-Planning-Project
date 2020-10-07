@@ -105,6 +105,10 @@ int main() {
            *   sequentially every .02 seconds
            */
           
+          std::cout << "Car degrees yaw: "  
+                    << car_yaw << ", "
+                    << "car rad yaw: " << deg2rad(car_yaw) << std::endl;
+          
           vehicle.Update(car_x, car_y, deg2rad(car_yaw), car_speed,
                          car_s, car_d,
                          previous_path_x, previous_path_y,
