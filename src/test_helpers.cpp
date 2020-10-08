@@ -150,9 +150,15 @@ TEST_CASE( "Cost of colision is estimated", "[colision_cost]") {
   };
   predictions.push_back(car_1);
   
-  double res = colision_cost(25, 40, 6, predictions);
-  REQUIRE( res == 0);
-  
+  vector<vector <double>> t;
+  vector<double> ts, td;
+  ts = {25, 40};
+  td = {4, 6};
+  t.push_back(ts);
+  t.push_back(td);
+  double res = colision_cost(t, predictions);
+  REQUIRE( res < 0.0001);
+  t.clear();
   
   vector<double> car_2 = { // car is in the right lane
     2, 
@@ -162,16 +168,37 @@ TEST_CASE( "Cost of colision is estimated", "[colision_cost]") {
   
   predictions.push_back(car_2);
   
-  // Car is 10m ahead
-  res = colision_cost(5, 21, 6, predictions);
+
   
+  // Car is 10m ahead
+  ts = {5, 21};
+  td = {4, 6};
+  t.push_back(ts);
+  t.push_back(td);
+  res = colision_cost(t, predictions);
+  t.clear();
+  
+    
   REQUIRE( res < .3 );
   REQUIRE( res > 0 );
   
   // Car is inside the trajectory;
-  res = colision_cost(20, 50, 6, predictions);
-  
+  ts = {20, 50};
+  td = {4, 6};
+  t.push_back(ts);
+  t.push_back(td);
+  res = colision_cost(t, predictions);
   REQUIRE( res == 1 );
+  t.clear();
+  
+  // Car is with 10 meeters behind the trajectory;
+  ts = {39, 50};
+  td = {4, 6};
+  t.push_back(ts);
+  t.push_back(td);
+  res = colision_cost(t, predictions);
+  REQUIRE( res == 1 );
+  t.clear();
   
   // Adding car very close to another lane 
   // does not change cost
@@ -181,9 +208,13 @@ TEST_CASE( "Cost of colision is estimated", "[colision_cost]") {
     2
   };
   predictions.push_back(car_3);
-  res = colision_cost(0, 10, 6, predictions);
-  REQUIRE( res == 0 );
-  
+  ts = {0, 10};
+  td = {4, 6};
+  t.push_back(ts);
+  t.push_back(td);
+  res = colision_cost(t, predictions);
+  REQUIRE( res < 0.0001 );
+  t.clear();
 }
 
 

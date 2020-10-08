@@ -4,6 +4,16 @@
 
 using std::vector;
 
+double lane_speed_cost(double target_speed, double next_car_speed) {
+  if (next_car_speed >= target_speed) {
+    return 0;
+  } 
+  else {
+    return (target_speed - next_car_speed) / target_speed;
+  }
+}
+
+
 double car_speed_cost(double target_speed, double car_speed) {
   if (car_speed > target_speed) {
     return 0;
@@ -48,7 +58,7 @@ double target_lane_safe_speed(double s, double d, double v, double delta_t,
     double d_distance = abs(sf_d - d);
    
     
-    if (d_distance < 1.8) { // car is in the same lane
+    if (d_distance < 2) { // car is in the same lane
       if (s_distance > 0 && s_distance < forward_distance) { // car is ahead
         if (s_min > s_distance || s_min < 0) { // is closest
           s_min = s_distance;
@@ -73,13 +83,19 @@ double target_lane_safe_speed(double s, double d, double v, double delta_t,
  * 
  * predictions is a 2d vector of cars with id, predicted_s and predicted_d
  * 
- * param car_s_min, car_s_max represent begining and end of trajectory. 
+ * param trajectory represents proposed trajectory in Frenet coordinates. 
  *   we want to make sure that no other cars are predicted to be in 5m range
  *   behind or ahead of this trajectory for it to be safe
  */
-double colision_cost(double car_s_min, double car_s_max, double car_d, vector<vector <double> > predictions) {
+double colision_cost(vector<vector <double> > trajectory, vector<vector <double> > predictions) {
   double d, s;
-  double cost, max_cost = -1;
+  double cost, cost_front, cost_behind, max_cost = -1;
+  vector <double> trajectory_s = trajectory[0];
+  vector <double> trajectory_d = trajectory[1];
+  
+  double car_d = trajectory_d[trajectory_d.size() -1];
+  double car_s_min = trajectory_s[0];
+  double car_s_max = trajectory_s[trajectory_s.size() -1];
   
   
   for (int i = 0; i < predictions.size(); i++) {
@@ -87,21 +103,18 @@ double colision_cost(double car_s_min, double car_s_max, double car_d, vector<ve
     d = predictions[i][2];
     s = predictions[i][1];
     
-    if (abs(car_d - d) > 3) { // vehicle is ahead of the car
+    if (fabs(car_d - d) > 2.8) { // vehicle is not in the same lane as trajectory target
       continue;
     }
     
     double distance = abs(car_s_max - s);
-    
-    if (car_s_min - 5 < s && car_s_max + 5 > s) { // car is inside the trajectory 
+ 
+    if (car_s_min - 10 < s && car_s_max + 5 > s) { // car is inside the trajectory 
       cost = 1; 
     }
-   
+    
     else if (distance < 10) {
-      cost = 1 - (distance - 5) / 5;
-    } 
-    else { // distance is more than 15m
-      cost = 0; 
+      cost = (10 - distance) / 10;
     }
     
     if (max_cost < cost || max_cost < 0) {
@@ -115,6 +128,82 @@ double colision_cost(double car_s_min, double car_s_max, double car_d, vector<ve
 double target_lane_switch_cost(double car_d, double target_d) {
   double change = abs(car_d - target_d);
   return  change >=4 ? 1 : change / 4;
+}
+
+vector<vector <double> > trajectory_derivative(vector<vector <double> > trajectory, double delta_t) {
+  vector<vector <double> > derivative;
+  
+  vector<double> x = trajectory[0];
+  vector<double> y = trajectory[1];
+  vector<double> vx, vy;
+  double delta, dx, dy;
+  
+  for (int i = 0; i < x.size() - 1; i++) {
+    dx = x[i+1] - x[i];
+    dy = y[i+1] - y[i];
+    vx.push_back(dx / delta_t);
+    vy.push_back(dy / delta_t);
+  }
+  
+  derivative.push_back(vx);
+  derivative.push_back(vy);
+  return derivative;
+}
+
+double trajectory_acceleration(vector<vector <double> > trajectory, double delta_t) {
+
+  vector<vector <double>> v = trajectory_derivative(trajectory, delta_t);
+  vector<vector <double>> a = trajectory_derivative(v, delta_t);
+  
+  vector<double> ax = a[0];
+  vector<double> ay = a[1];
+  double abs_a, max_a = -1;
+  double delta_v;
+  for (int i = 0; i < ax.size() - 1; i++) {
+    abs_a = sqrt(pow(ax[i], 2) + pow(ay[i], 2));
+    if (abs_a > max_a || max_a < 0) {
+      max_a = abs_a;
+    }
+  }
+  return max_a;
+}
+
+double trajectory_acceleration_cost(double acceleration) {
+  if (acceleration < 10) {
+    return 0;
+  } 
+  else {
+    return 1;
+  }
+}
+
+double trajectory_jerk(vector<vector <double> > trajectory, double delta_t) {
+  vector<vector <double>> v = trajectory_derivative(trajectory, delta_t);
+  vector<vector <double>> a = trajectory_derivative(v, delta_t);
+  vector<vector <double>> j = trajectory_derivative(a, delta_t);
+  
+  vector<double> jx = j[0];
+  vector<double> jy = j[1];
+
+  double delta_a, abs_j, max_j = -1;
+  for (int i = 0; i < jx.size(); i++) {
+    abs_j = sqrt(pow(jx[i], 2) + pow(jy[i], 2));
+   
+    if (abs_j > max_j || max_j < 0) {
+      max_j = abs_j;
+    }
+    
+  }
+  return max_j;
+}
+
+double trajectory_jerk_cost(double jerk) {
+  if (jerk < 10) {
+    return 0;
+  } 
+  else {
+    return 1;
+  }
 }
 
 double trajectory_cost(vector<vector <double> > trajectory, double ref_d, double target_speed, double delta_t, 
@@ -143,21 +232,38 @@ double trajectory_cost(vector<vector <double> > trajectory, double ref_d, double
   //   << ref_point_y << ", " 
   //   << theta << std::endl;
   
-  
-  vector<double> frenet  = getFrenet(
-    ref_point_x, ref_point_y, theta, 
-    map_waypoints_x, 
-    map_waypoints_y
-  );
-  
-  double trajectory_ref_s = frenet[0];
-  double trajectory_ref_d = frenet[1];
-  
+  vector<double> trajectory_s, trajectory_d;
+  vector<double> frenet;
+  for (int i = 0; i < trajectory_x.size() - 1; i++) {
+    
+    theta = atan2(
+      trajectory_y[i + 1] - trajectory_y[i], 
+      trajectory_x[i + 1] - trajectory_x[i]
+    );
+    
+    frenet  = getFrenet(
+      trajectory_x[i], 
+      trajectory_y[i], 
+      theta, 
+      map_waypoints_x, 
+      map_waypoints_y
+    );
+    
+    trajectory_s.push_back(frenet[0]);
+    trajectory_d.push_back(frenet[1]);
+  }
+
+  vector<vector <double>> trajectory_frenet;
+  trajectory_frenet.push_back(trajectory_s);
+  trajectory_frenet.push_back(trajectory_d);
  
   double predict_detla_t = trajectory_size * delta_t;
   
   vector<vector <double> > prediction = predict_sensor_fusion(sensor_fusion, predict_detla_t);
-  double colision = colision_cost(trajectory_ref_s - predict_detla_t * target_speed, trajectory_ref_s, trajectory_ref_d, prediction);
+  double colision = colision_cost(
+    trajectory_frenet,
+    prediction
+  );
   
   // std::cout << "Experimental colision cost. " << std::endl 
   //           << "  Ref s: " << trajectory_ref_s << "," << std::endl
@@ -170,18 +276,27 @@ double trajectory_cost(vector<vector <double> > trajectory, double ref_d, double
   // }
   
   double safe_speed = target_lane_safe_speed(
-    trajectory_ref_s, 
-    trajectory_ref_d, 
+    trajectory_s[trajectory_s.size() -1], 
+    trajectory_d[trajectory_d.size() -1], 
     target_speed, predict_detla_t, sensor_fusion, 50
   );
   
   double speed_cost = car_speed_cost(target_speed, safe_speed);
-  
-  // std::cout << "Experimental trajectory speed cost. " << std::endl 
-  //           << "  Target speed: " << target_speed << "," << std::endl
-  //           << "  Safe speed: " << safe_speed << "," << std::endl
-  //           << "  Speed cost: " << speed_cost << std::endl;
+  double acceleration = trajectory_acceleration(trajectory, delta_t);
+  double acceleration_cost = trajectory_acceleration_cost(acceleration);
+  double jerk = trajectory_jerk(trajectory, delta_t);
+  double jerk_cost = trajectory_jerk_cost(jerk);
+  std::cout << "Experimental trajectory speed cost. " << std::endl
+            << "  Target speed: " << target_speed << "," << std::endl
+            << "  Safe speed: " << safe_speed << "," << std::endl
+            << "  Speed cost: " << speed_cost << std::endl
+            << "  Max Acceleration (cost)" << acceleration << "(" << acceleration_cost << ")" << std::endl
+            << "  Max Jerk (cost)" << jerk << "(" << jerk_cost << ")" << std::endl;
   double lane_switch_cost = target_lane_switch_cost(frenet[1], ref_d);
-  return 20 * colision   + 5 * speed_cost + lane_switch_cost * 0.1;
+  return 20 * colision +
+    5 * speed_cost + 
+    lane_switch_cost * 0.1 + 
+    acceleration_cost + 
+    jerk_cost;
   
 }

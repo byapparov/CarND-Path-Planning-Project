@@ -49,20 +49,6 @@ double frenet_distance(double car_s, double object_s, double max_s) {
 }
 
 
-
-
-
-double lane_speed_cost(double target_speed, double next_car_speed) {
-  if (next_car_speed >= target_speed) {
-    return 0;
-  } 
-  else {
-    return (target_speed - next_car_speed) / target_speed;
-  }
-}
-
-
-
 class Vehicle {
   
 public:
@@ -96,6 +82,8 @@ private:
   double delta_t;
   double ref_x, ref_y, ref_yaw, ref_s, ref_d; // this refers to the last point in the current trajectory
   
+  double acceleration = 0;
+  
   VehicleState state;
   
   vector<double> trajectory_x;
@@ -106,7 +94,9 @@ private:
   vector<double> map_waypoints_x; 
   vector<double> map_waypoints_y;
   
-  
+  double acceleration_update(int sign);
+    
+
   vector<vector<double> > compute_trajectory(int target_lane, double distance, int size, double safe_speed);
   
 };
@@ -264,7 +254,7 @@ void Vehicle::SwitchState(vector<vector <double> > sensor_fusion) {
   this->lane = get_final_lane(this->lane, this->state);
   
   this->target_speed = target_lane_safe_speed(
-    ref_s, 
+    car_s, 
     this->lane * 4 + 2, 
     reference_speed, 
     delta_t, 
@@ -305,15 +295,15 @@ vector<vector<double> > Vehicle::compute_trajectory(int target_lane, double dist
   //           << "      yaw: " << ref_yaw << std::endl;
   
   vector<double> next_wp0 = getXY(
-    ref_s + 10, 
-    (lane_number_to_frenet(target_lane) + ref_d * 3) / 4, 
+    ref_s + 20, 
+    (lane_number_to_frenet(target_lane) + ref_d) / 2, 
     map_waypoints_s, 
     map_waypoints_x, 
     map_waypoints_y
   );
   
   vector<double> next_wp1 = getXY(
-    ref_s + 20, 
+    ref_s + 40, 
     (lane_number_to_frenet(target_lane) * 2 + ref_d) / 3, 
     map_waypoints_s, 
     map_waypoints_x, 
@@ -321,7 +311,7 @@ vector<vector<double> > Vehicle::compute_trajectory(int target_lane, double dist
   );
   
   vector<double> next_wp2 = getXY(
-    ref_s + 40, 
+    ref_s + 60, 
     (lane_number_to_frenet(target_lane)), 
     map_waypoints_s, 
     map_waypoints_x, 
@@ -329,7 +319,7 @@ vector<vector<double> > Vehicle::compute_trajectory(int target_lane, double dist
   );
   
   vector<double> next_wp3 = getXY(
-    ref_s + 50, 
+    ref_s + 75, 
     lane_number_to_frenet(target_lane), 
     map_waypoints_s, 
     map_waypoints_x, 
@@ -337,7 +327,7 @@ vector<vector<double> > Vehicle::compute_trajectory(int target_lane, double dist
   );
   
   vector<double> next_wp4 = getXY(
-    ref_s + 60, 
+    ref_s + 90, 
     (lane_number_to_frenet(target_lane)), 
     map_waypoints_s, 
     map_waypoints_x, 
@@ -431,17 +421,27 @@ vector<vector<double> > Vehicle::compute_trajectory(int target_lane, double dist
   return trajectory;
 }
 
+double Vehicle::acceleration_update(int sign) {
+  if (acceleration < 5 && sign > 0) {
+    acceleration += .2;
+  }
+  else if(acceleration > -5 && sign < 0) {
+    acceleration -= .2;
+  }
+}
+
 double Vehicle::speed_update(double speed, double safe_speed) {
 
   if(abs(speed - safe_speed) <= 0.5) {
     return speed;
   }
   if (speed > safe_speed) {
-    return speed -  0.1;// 0.224;
+    acceleration_update(-1);
   } 
   if (speed < safe_speed) {
-    return speed + 0.1; // 0.224;
+    acceleration_update(1);
   }
+  return speed + acceleration * 0.02;
 }
 
 std::vector<std::vector<double> > Vehicle::Trajectory() {
