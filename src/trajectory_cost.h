@@ -239,12 +239,6 @@ double trajectory_cost(vector<vector <double> > trajectory, double target_d, dou
     ref_point_y - ref_point_prev_y, 
     ref_point_x - ref_point_prev_x
   );
-
-  
-  // std::cout << "Experimental trajectory coordinates: x, y, theta: " 
-  //   << ref_point_x << ", " 
-  //   << ref_point_y << ", " 
-  //   << theta << std::endl;
   
   vector<double> trajectory_s, trajectory_d;
   vector<double> frenet;
@@ -289,20 +283,10 @@ double trajectory_cost(vector<vector <double> > trajectory, double target_d, dou
   double jerk = trajectory_jerk(trajectory, delta_t);
   double jerk_cost = trajectory_jerk_cost(jerk);
   double position_cost = road_position_cost(trajectory_ref_d);
-  std::cout << "Experimental trajectory speed cost. " << std::endl
-            << "  Ref s: " << trajectory_ref_s << "," << std::endl
-            << "  Ref d: " << trajectory_ref_d << "," << std::endl
-            << "  Target speed: " << target_speed << "," << std::endl
-            << "  Safe speed: " << safe_speed << "," << std::endl
-            << "  Colision cost: " << colision << std::endl
-            << "  Speed cost: " << speed_cost << std::endl
-            << "  Max Acceleration (cost)" << acceleration << "(" << acceleration_cost << ")" << std::endl
-            << "  Max Jerk (cost)" << jerk << "(" << jerk_cost << ")" << std::endl;
   double lane_switch_cost = target_lane_switch_cost(frenet[1], target_d);
+  
   return 
     100.0 * colision +
     20.0 * speed_cost + 
-    // 1.0 * lane_switch_cost +
     2.0 * position_cost;
-  
 }

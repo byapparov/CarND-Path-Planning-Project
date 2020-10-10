@@ -1,6 +1,111 @@
 # CarND-Path-Planning-Project
 Self-Driving Car Engineer Nanodegree Program
-   
+
+
+## Reflection
+
+To meet specification of the project I have broken the problem into three parts:
+
+* Assesing the safe speed of the car based on the predictions from sensor fusion about other cars (`target_lane_safe_speed()` in `trajectory_cost.h`);
+* Generation of smooth trajectories that don't vialate speed, acceleration and jerk constraints (`Vehicle::compute_trajectory()`);
+* Selection of trajectories based on the cost functions that prevent colision, maximise speed and keep the car in the central lane if it is not taking over other cars (`trajectory_cost.h`).
+
+## Example
+
+Here is an example of how `Vehcile()` class can be used to drive the car:
+
+```cpp
+#include "vehicle.h"
+
+Vehicle vehicle(
+  1, // initial lane of the car
+  0.0, // initial speed of the car
+  47.5 / 2.23, // target speed, aka speed limit
+  map_waypoints_s, 
+  map_waypoints_x, 
+  map_waypoints_y
+);
+
+// within the message update
+h.onMessage(...) {
+
+  // update the state of the car with information from sensors
+  vehicle.Update( 
+    car_x, 
+    car_y, 
+    deg2rad(car_yaw), 
+    car_speed,
+    car_s, car_d,
+    previous_path_x, previous_path_y,
+    end_path_s, end_path_d);
+  
+  // update the state of the car to the new optimal state based on the trajectory costs
+  vehicle.SwitchState(sensor_fusion); 
+  
+  // get current best trajectory cost of the car
+  vector<vector<double>> trajectory = vehicle.Trajectory(); 
+  
+  
+  // trajectory points can be used to update the controls of the car
+  // to follow optimal chosed trajectory
+  next_x_vals = trajectory[0];
+  next_y_vals = trajectory[1];
+
+}
+```
+
+## Model Documentation
+
+All code files for this project can be found in the `src` folder.
+
+### Code files
+
+Code of the model consist of the following modules:
+
+|File|Type|Description|
+|--|---|--------------|
+|vehicle.h|class| `Vehicle` class manages trajectory of the car and contains data structure to store key information about the car's state|
+|trajectory_cost.h|functions|Functions to estimate different components of trajectory cost|
+|sensor_fusion.h|functions|Function to predict state of surounding vehicles based on data from sensor fusion|
+|vehicle_states|functions|Function that generates next possible states given the current state of the car|
+|map.h|functions|Helper functions to support unit conversions, space transformations etc.|
+|helpers.h|functions|Helper functions to support Frenet to XY transformations of coordinates|
+
+### External single file libraries
+
+|File|Type|Description|
+|--|---|--------------|
+|spline.h|class|Contains `Spline` class that was used in this project to generate acceptable trajectories|
+|catch.hpp|framework|Catch2 framework for unit testing of cpp code|
+
+### Trajectory Generation
+
+In this soluion, I have generated trajectories using `Spline` class from the corresponding [library](https://kluge.in-chemnitz.de/opensource/spline/).
+
+The process of trajectory generation involved following steps:
+
+* Conversion of the target and reference Frenet coordinates into the map coordinates using `getXY()` functions from `helpers.h`.
+* Conversion of the trajectory target coordinates into coordinates of the car. These transformations can be found in the `map.h` file in functions `GlobalCoordinates()` and `LocalCoordinates()`;
+* Incrementing trajectory with deltas that would not break the limits on speed, acceleration and jerk. To acheieve this I have used `Vehicle()` class as the state machine of the car's acceleration which was updated with every new point of trajectory. This allowed me to acheive the maximum performance in terms of acceleration within the constraints of the project. 
+
+### Testing
+
+Unit tests for the project were implemented using [catch2](https://github.com/catchorg/Catch2).
+
+All the tests can be found in `tset_helpers.cpp` and executed 
+
+
+### Future improvements
+
+Current implementation demonstrated acceptable performance on the road with the car being able to accelarate and slow down depending on the speed and position of the car ahead. It also makes good lane transitions while avoiding colisions.
+
+I have used a very simple approach to estimate if another car is blocking a given trajectory, which does not calculate possitions of the cars in all time points of the trajectory. This means that in rear conditions a car moving sideways at speed could cause a colision. I have not observed this situation in the simulator, but it would be safer if the full lengths of trajectories were checked. 
+
+One other imrovement could be associated with probabalistic approach to predictions of other cars' positions, which could make selection of trajectories safer.
+
+In my solution, I have only implemented three states for the car - Keep Lane (KL),  Lane Change Left (LCL) and Lane Change Right (LCR). This was enough to achieve objectives of the project. To make navigation of the car optimal, solution with more states and dynamic programming optimiser can be developed. This would improve car navigation in certain situations, where for example it is blocked from the immidate lane transition by another car.
+
+
 ### Simulator.
 You can download the Term3 Simulator which contains the Path Planning Project from the [releases tab (https://github.com/udacity/self-driving-car-sim/releases/tag/T3_v1.2).  
 

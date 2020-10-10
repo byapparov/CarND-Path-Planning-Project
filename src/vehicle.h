@@ -128,7 +128,6 @@ void Vehicle::Update(double x, double y, double yaw, double car_speed,
   }
   
   if (prev_size < 2) {
-     // std::cout << "Initialising reference position" << std::endl;
      ref_x = x;
      ref_y = y;
      ref_yaw = yaw;
@@ -155,12 +154,6 @@ void Vehicle::Update(double x, double y, double yaw, double car_speed,
     this->reference_speed = sqrt(dx * dx + dy * dy) / delta_t;
   }
  
-  std::cout << "Car Update" << std::endl
-            << "  ref s: " << ref_s << ", car s: " << car_s << std::endl
-            << "  ref d: " << ref_d << ", car d: " << car_d << std::endl
-            << "  ref x, y, yaw: " << ref_x << ", " << ref_y << ", " << ref_yaw << std::endl
-            << "  car speed: " << car_speed << std::endl 
-            << "  ref speed: " << reference_speed << std::endl;
 }
 
 
@@ -169,8 +162,7 @@ void Vehicle::Accelerate() {
 }
 
 void Vehicle::SwitchState(vector<vector <double> > sensor_fusion) {
-  // std::cout << "Switching veichle state" << std::endl;
-
+ 
   vector<vector<double> > trajectory;
   VehicleState optimal_state;
   vector<double> ref_point, ref_point_prev;
@@ -189,11 +181,7 @@ void Vehicle::SwitchState(vector<vector <double> > sensor_fusion) {
   for (int i = 0; i < states.size(); i++) {
     next_state = states[i];
     int final_lane = get_final_lane(lane, next_state);
-    
-    std::cout << "Experimental target lane: " << final_lane 
-              << ", for state: " << label_vehicle_state(next_state) << std::endl;
-    
-    
+  
     double safe_speed = target_lane_safe_speed(
       car_s, 
       final_lane * 4 + 2, 
@@ -224,9 +212,7 @@ void Vehicle::SwitchState(vector<vector <double> > sensor_fusion) {
     // this is currently updated by compute_trajectory function
     this->acceleration = current_acceleration; 
   }
- 
-  std::cout << "New optimal state: " << label_vehicle_state(optimal_state) << std::endl;
-    
+
     
   this->state = optimal_state;
   this->lane = get_final_lane(this->lane, this->state);
@@ -240,12 +226,6 @@ void Vehicle::SwitchState(vector<vector <double> > sensor_fusion) {
     sensor_fusion,
     40
   );
-  
-  std::cout << "New target speed: " << this->target_speed << " vs current speed: " << this->speed << std::endl;
-  
-  std::cout << "New target lane: " << this->lane << std::endl;
-  // std::cout << "Trajectory min cost: " << trajectory_cost_min << std::endl;
-  
 }
 
 double Vehicle::ReferenceSpeed() {
@@ -263,17 +243,6 @@ vector<vector<double> > Vehicle::compute_trajectory(int target_lane, double dist
   
   sx.push_back(ref_x);
   sy.push_back(ref_y);
-  
-  // std::cout << "Generating Trajectory" << std::endl
-  //           << "      target lane: "<< target_lane << std::endl
-  //           << "      d value: "<< lane_number_to_frenet(target_lane) << std::endl;
-  // 
-  // std::cout << "    reference points "    << std::endl
-  //           << "      s: "   << ref_s << std::endl
-  //           << "      d: "   << ref_d << std::endl
-  //           << "      x: "   << ref_x << std::endl
-  //           << "      y: "   << ref_y << std::endl
-  //           << "      yaw: " << ref_yaw << std::endl;
   
   vector<double> next_wp0 = getXY(
     ref_s + 30, 
@@ -336,22 +305,12 @@ vector<vector<double> > Vehicle::compute_trajectory(int target_lane, double dist
  
     vx.push_back(local[0]);
     vy.push_back(local[1]);
-    
-    // if (ref_s > 1200) {
-    //   std::cout << "Points in car coordinates x, y : (" << vx[i] << ", " << vy[i] << ")" << std::endl;
-    // }
-   
   }
   
   tk::spline s;
   
-  // std::cout << "ptsx: " << vx[0] << std::endl;
-  
   s.set_points(vx, vy);
   
-  // std::cout << "Trajectory end point distance x: " << distance << std::endl;
-  // std::cout << "Trajectory end point distance y: " << s(distance) << std::endl;
- 
   double target_x = distance;
   double target_y = s(target_x);
   double target_dist = sqrt(target_x * target_x + target_y * target_y);
@@ -368,20 +327,10 @@ vector<vector<double> > Vehicle::compute_trajectory(int target_lane, double dist
   for (int i = 0; i < size - trajectory_x.size(); i ++) {
     
     point_speed = speed_update(point_speed, safe_speed);
-    //std::cout << "  point speed: " << point_speed;
-    
+   
     x_add_on += (delta_t * point_speed) * cos_trajectory;
     double x = x_add_on;
     double y = s(x);
-    
-    
-    // if (ref_s > 1200) {
-    //   std::cout << "Releative position: "
-    //             << "(" << x << ", " << y << ")" << " point speed: "
-    //             << point_speed << ", distance: "
-    //             << distance  << std::endl;
-    // }
-    // 
     
     vector<double> g;
     g = GlobalCoordinates(ref_x, ref_y, ref_yaw, x, y);
@@ -395,10 +344,6 @@ vector<vector<double> > Vehicle::compute_trajectory(int target_lane, double dist
   
   trajectory.push_back(new_x);
   trajectory.push_back(new_y);
-  // std::cout << "New trajectory xy tail" << std::endl 
-  //          << "  x : " << new_x[new_x.size() -1 ] << std::endl 
-  //           << "  y : " << new_y[new_y.size() -1 ] << std::endl;
-  
   return trajectory;
 }
 
