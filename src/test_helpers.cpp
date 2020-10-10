@@ -1,6 +1,6 @@
 #define CATCH_CONFIG_MAIN
 #include "catch.hpp"
-#include "lanes_state_machine.h"
+#include "vehicle.h"
 
 
 TEST_CASE( "Can calculate lane number correctly", "[frenet_to_lane_number]") {

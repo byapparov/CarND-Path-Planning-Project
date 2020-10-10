@@ -19,12 +19,6 @@ using std::vector;
 //   car's d position in frenet coordinates.
 
 
-
-double frenet_distance(double car_s, double object_s, double max_s) {
-  return std::fmod(object_s, max_s) - car_s;
-}
-
-
 class Vehicle {
   
 public:

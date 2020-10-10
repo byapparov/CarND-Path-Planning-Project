@@ -8,7 +8,7 @@
 #include "helpers.h"
 #include "json.hpp"
 #include "spline.h"
-#include "lanes_state_machine.h"
+#include "vehicle.h"
 
 // for convenience
 using nlohmann::json;
