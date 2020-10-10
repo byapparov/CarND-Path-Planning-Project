@@ -201,7 +201,7 @@ void Vehicle::SwitchState(vector<vector <double> > sensor_fusion) {
       this->speed_limit, 
       delta_t, 
       sensor_fusion,
-      30
+      50
     );
   
     vector<vector<double> > trajectory = this->compute_trajectory(final_lane, 50, 100, safe_speed);
@@ -238,7 +238,7 @@ void Vehicle::SwitchState(vector<vector <double> > sensor_fusion) {
     this->speed_limit,
     delta_t, 
     sensor_fusion,
-    30
+    40
   );
   
   std::cout << "New target speed: " << this->target_speed << " vs current speed: " << this->speed << std::endl;
@@ -359,7 +359,7 @@ vector<vector<double> > Vehicle::compute_trajectory(int target_lane, double dist
   double x_add_on = 0;
   double point_speed = reference_speed;
   
-  
+  double cos_trajectory = target_x / sqrt( target_x * target_x + target_y * target_y);
   // copy current trajectory, so it is not
   // changed by experimental calculations
   vector<double> new_x = trajectory_x;
@@ -370,7 +370,7 @@ vector<vector<double> > Vehicle::compute_trajectory(int target_lane, double dist
     point_speed = speed_update(point_speed, safe_speed);
     //std::cout << "  point speed: " << point_speed;
     
-    x_add_on += (delta_t * point_speed);
+    x_add_on += (delta_t * point_speed) * cos_trajectory;
     double x = x_add_on;
     double y = s(x);
     
@@ -413,7 +413,7 @@ double Vehicle::acceleration_update(int sign) {
 
 double Vehicle::speed_update(double speed, double safe_speed) {
 
-  if(abs(speed - safe_speed) <= 0.5) {
+  if(fabs(speed - safe_speed) <= 0.1) {
     return speed;
   }
   if (speed > safe_speed) {
@@ -422,7 +422,11 @@ double Vehicle::speed_update(double speed, double safe_speed) {
   if (speed < safe_speed) {
     acceleration_update(1);
   }
-  return speed + acceleration * 0.02;
+  double res =  speed + acceleration * 0.02;
+  if (res > speed_limit) {
+    return speed_limit;
+  }
+  return res;
 }
 
 std::vector<std::vector<double> > Vehicle::Trajectory() {
