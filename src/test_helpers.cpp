@@ -32,7 +32,8 @@ TEST_CASE( "Cost of the target position determined for a given sensor fustion", 
   
   double s = 100;
   double d = 6;
-  double v = 47.5; // velocity target
+  double speed_limit = mph_to_ms(47.5); // ms
+  double v = 47.5; // car velocity
   double delta_t = 0.5;
   
   vector<vector <double>> sensor_fusion;
@@ -40,7 +41,7 @@ TEST_CASE( "Cost of the target position determined for a given sensor fustion", 
     1,   // id
     543, // x
     532, // y
-    30, // xv
+    10, // xv
     0.1, // xy
     120, // s
     6.2 // lane 2
@@ -49,17 +50,17 @@ TEST_CASE( "Cost of the target position determined for a given sensor fustion", 
   sensor_fusion.push_back(car_1);
     
   
-  double res = target_lane_safe_speed(s, d, v, delta_t, sensor_fusion, 50);
-  double exp = 30.0;
+  double res = target_lane_safe_speed(s, d, v, speed_limit, delta_t, sensor_fusion, 30);
+  double exp = 10.0 - 0.25;
   
-  REQUIRE ( res == Approx(res) );
+  REQUIRE ( abs(res - exp) < 0.2  );
   
   
   vector <double> car_2 = {
     2,   // id
     543, // x
     532, // y
-    50, // xv
+    mph_to_ms(50), // xv
     0.1, // xy
     120,
     9.8 // land 3
@@ -68,13 +69,13 @@ TEST_CASE( "Cost of the target position determined for a given sensor fustion", 
   sensor_fusion.push_back(car_2);
 
   // Car 2 is going in the same lane but at good spped
-  res = target_lane_safe_speed(s, 9, v, delta_t, sensor_fusion, 50);
-  exp = 50;
-  REQUIRE ( res == Approx(res));
+  exp = speed_limit;
+  res = target_lane_safe_speed(s, 9, v, speed_limit, delta_t, sensor_fusion, 50);
+  REQUIRE ( res == Approx(exp));
   
   // There are no cars in lane 1
-  res = target_lane_safe_speed(s, 2, v, delta_t, sensor_fusion, 50);
-  exp = v;
+  res = target_lane_safe_speed(s, 2, v, speed_limit, delta_t, sensor_fusion, 50);
+  exp = speed_limit;
   REQUIRE ( res == Approx(res));
   
   
@@ -90,9 +91,9 @@ TEST_CASE( "Cost of the target position determined for a given sensor fustion", 
   sensor_fusion.push_back(car_3);
   // Car 3 is moving at good speed before car 1. 
   // This should override the cost and set it to zero.
-  res = target_lane_safe_speed(s, d, v, delta_t, sensor_fusion, 50);
-  exp = 60;
-  REQUIRE ( res == Approx(res));
+  res = target_lane_safe_speed(s, d, v, speed_limit, delta_t, sensor_fusion, 50);
+  exp = speed_limit;
+  REQUIRE ( res == Approx(exp));
 }
 
 TEST_CASE( "state label to integer works", "[get_final_lane]") {
@@ -144,7 +145,7 @@ TEST_CASE( "Cost of colision is estimated", "[colision_cost]") {
   
   // In this scenario the car is far away in the second lane
   vector<double> car_1 = { // car is in the right lane
-    2, 
+    1, 
     100,
     5.5
   };
@@ -153,10 +154,10 @@ TEST_CASE( "Cost of colision is estimated", "[colision_cost]") {
   vector<vector <double>> t;
   vector<double> ts, td;
   ts = {25, 40};
-  td = {4, 6};
+  td = {4, 5.5};
   t.push_back(ts);
   t.push_back(td);
-  double res = colision_cost(t, predictions);
+  double res = colision_cost(t, 6, predictions);
   REQUIRE( res < 0.0001);
   t.clear();
   
@@ -167,36 +168,33 @@ TEST_CASE( "Cost of colision is estimated", "[colision_cost]") {
   };
   
   predictions.push_back(car_2);
-  
-
-  
   // Car is 10m ahead
   ts = {5, 21};
   td = {4, 6};
   t.push_back(ts);
   t.push_back(td);
-  res = colision_cost(t, predictions);
+  res = colision_cost(t, 6, predictions);
   t.clear();
   
     
   REQUIRE( res < .3 );
   REQUIRE( res > 0 );
   
-  // Car is inside the trajectory;
+  // Car 2 is inside the trajectory;
   ts = {20, 50};
   td = {4, 6};
   t.push_back(ts);
   t.push_back(td);
-  res = colision_cost(t, predictions);
+  res = colision_cost(t, 6, predictions);
   REQUIRE( res == 1 );
   t.clear();
   
-  // Car is with 10 meeters behind the trajectory;
-  ts = {39, 50};
+  // Car 2 is with 10 meeters behind the trajectory;
+  ts = {34, 50};
   td = {4, 6};
   t.push_back(ts);
   t.push_back(td);
-  res = colision_cost(t, predictions);
+  res = colision_cost(t, 6, predictions);
   REQUIRE( res == 1 );
   t.clear();
   
@@ -212,7 +210,7 @@ TEST_CASE( "Cost of colision is estimated", "[colision_cost]") {
   td = {4, 6};
   t.push_back(ts);
   t.push_back(td);
-  res = colision_cost(t, predictions);
+  res = colision_cost(t, 6, predictions);
   REQUIRE( res < 0.0001 );
   t.clear();
 }

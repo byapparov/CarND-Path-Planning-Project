@@ -18,31 +18,7 @@ using std::vector;
 //   car's s position in frenet coordinates, 
 //   car's d position in frenet coordinates.
 
-/**
- * returns lane number for give d frenet coordinate
- */
-int frenet_to_lane_number(double d) {
-  if (d > 0.0 & d < 12.0) {
-    return floor(d / 4.0);
-  }
-  else {
-    return -1;
-  }
-}
 
-/**
- * returns d frenet coordinate for the center of the lane
- * 
- * param l - number of the lane starting from zero
- */
-double lane_number_to_frenet(int l) {
-  if (l >=0 & l <=2) {
-    return l * 4.0 + 2.0;
-  }
-  else {
-    return -1.0;
-  }
-}
 
 double frenet_distance(double car_s, double object_s, double max_s) {
   return std::fmod(object_s, max_s) - car_s;
@@ -143,11 +119,7 @@ void Vehicle::Update(double x, double y, double yaw, double car_speed,
   car_s = s;
   car_d = d;
   
-  
-  // 1 mhph is 0.44704 m/s
-  double ms_to_mph = 2.23694; // 1 m/s is 2.23694 mhph
-  
-  this->speed = car_speed / ms_to_mph;
+  this->speed = mph_to_ms(car_speed);
   
   trajectory_x.clear();
   trajectory_y.clear();
@@ -218,36 +190,48 @@ void Vehicle::SwitchState(vector<vector <double> > sensor_fusion) {
   
   vector<VehicleState> states = possible_next_states(this->state);
   VehicleState next_state;
+  
+  double current_acceleration = this->acceleration;
   for (int i = 0; i < states.size(); i++) {
     next_state = states[i];
     int final_lane = get_final_lane(lane, next_state);
     
-   // std::cout << "Experimental target lane: " << final_lane 
-    //          << ", for state: " << label_vehicle_state(next_state) << std::endl;
+    std::cout << "Experimental target lane: " << final_lane 
+              << ", for state: " << label_vehicle_state(next_state) << std::endl;
     
     
     double safe_speed = target_lane_safe_speed(
-      ref_s, final_lane * 4 + 2, reference_speed, delta_t, 
+      car_s, 
+      final_lane * 4 + 2, 
+      this->reference_speed, 
+      this->speed_limit, 
+      delta_t, 
       sensor_fusion,
       30
     );
-    
+  
     vector<vector<double> > trajectory = this->compute_trajectory(final_lane, 50, 100, safe_speed);
 
-    cost = trajectory_cost(trajectory, this->ref_d, 
-                                      this->speed_limit, 
-                                      delta_t, 
-                                      sensor_fusion,     
-                                      this->map_waypoints_x, 
-                                      this->map_waypoints_y);
-    
+    cost = trajectory_cost(trajectory,
+                          lane_number_to_frenet(final_lane),
+                          safe_speed,
+                          this->speed_limit, 
+                          delta_t, 
+                          sensor_fusion,     
+                          this->map_waypoints_x, 
+                          this->map_waypoints_y);
+                    
     if (cost < trajectory_cost_min || trajectory_cost_min < 0) {
       trajectory_cost_min = cost;
       optimal_state = next_state;
     }
-  }
     
-  // std::cout << "New optimal state: " << label_vehicle_state(optimal_state) << std::endl;
+    // restore the state of the car acceleration
+    // this is currently updated by compute_trajectory function
+    this->acceleration = current_acceleration; 
+  }
+ 
+  std::cout << "New optimal state: " << label_vehicle_state(optimal_state) << std::endl;
     
     
   this->state = optimal_state;
@@ -255,14 +239,17 @@ void Vehicle::SwitchState(vector<vector <double> > sensor_fusion) {
   
   this->target_speed = target_lane_safe_speed(
     car_s, 
-    this->lane * 4 + 2, 
-    reference_speed, 
+    car_d, 
+    this->speed, 
+    this->speed_limit,
     delta_t, 
     sensor_fusion,
-    15
+    30
   );
   
-  // std::cout << "New target lane: " << this->lane << std::endl;
+  std::cout << "New target speed: " << this->target_speed << " vs current speed: " << this->speed << std::endl;
+  
+  std::cout << "New target lane: " << this->lane << std::endl;
   // std::cout << "Trajectory min cost: " << trajectory_cost_min << std::endl;
   
 }
@@ -295,7 +282,7 @@ vector<vector<double> > Vehicle::compute_trajectory(int target_lane, double dist
   //           << "      yaw: " << ref_yaw << std::endl;
   
   vector<double> next_wp0 = getXY(
-    ref_s + 20, 
+    ref_s + 30, 
     (lane_number_to_frenet(target_lane) + ref_d) / 2, 
     map_waypoints_s, 
     map_waypoints_x, 
@@ -303,7 +290,7 @@ vector<vector<double> > Vehicle::compute_trajectory(int target_lane, double dist
   );
   
   vector<double> next_wp1 = getXY(
-    ref_s + 40, 
+    ref_s + 45, 
     (lane_number_to_frenet(target_lane) * 2 + ref_d) / 3, 
     map_waypoints_s, 
     map_waypoints_x, 

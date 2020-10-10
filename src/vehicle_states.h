@@ -44,6 +44,7 @@ int get_final_lane(int lane, VehicleState state) {
       return lane + 1;
     }
   }
+  exit(-1);
 }
 
 

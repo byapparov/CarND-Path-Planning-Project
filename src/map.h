@@ -25,3 +25,37 @@ vector<double> GlobalCoordinates(double ref_x, double ref_y, double ref_yaw, dou
   v.push_back(gy);
   return v;
 }
+
+double mph_to_ms(double x) {
+  // 1 mhph is 0.44704 m/s
+  // 1 m/s is 2.23694 mhph
+  
+  return x / 2.23694;
+}
+
+
+/**
+ * returns lane number for give d frenet coordinate
+ */
+int frenet_to_lane_number(double d) {
+  if (d > 0.0 & d < 12.0) {
+    return floor(d / 4.0);
+  }
+  else {
+    return -1;
+  }
+}
+
+/**
+ * returns d frenet coordinate for the center of the lane
+ * 
+ * param l - number of the lane starting from zero
+ */
+double lane_number_to_frenet(int l) {
+  if (l >=0 & l <=2) {
+    return l * 4.0 + 2.0;
+  }
+  else {
+    return -1.0;
+  }
+}

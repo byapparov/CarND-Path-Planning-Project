@@ -116,8 +116,7 @@ int main() {
 
           vehicle.SwitchState(sensor_fusion);
           
-          vector<vector<double>> trajectory;
-          trajectory = vehicle.Trajectory();
+          vector<vector<double>> trajectory = vehicle.Trajectory();
         
           next_x_vals = trajectory[0];
           next_y_vals = trajectory[1];

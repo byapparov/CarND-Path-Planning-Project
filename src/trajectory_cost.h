@@ -23,12 +23,13 @@ double car_speed_cost(double target_speed, double car_speed) {
   }
 }
 
+
 /**
  * Gets the speed of the closest hevicle for the target d
  * 
  * param v - speed of the car in m/s
  */
-double target_lane_safe_speed(double s, double d, double v, double delta_t,
+double target_lane_safe_speed(double s, double d, double v, double speed_limit, double delta_t,
                               std::vector<std::vector<double> > sensor_fusion,
                               double forward_distance) {
   
@@ -37,7 +38,6 @@ double target_lane_safe_speed(double s, double d, double v, double delta_t,
   double cost = 0.0;
   
   double s_min = -1;
-  double speed_limit = 47.5 / 2.23694;
   double safe_speed = speed_limit;
   
   for (int i = 0; i < sensor_fusion.size(); i ++) {
@@ -54,15 +54,15 @@ double target_lane_safe_speed(double s, double d, double v, double delta_t,
     
     double sf_s_predicted = sf_s + sf_v * delta_t;
     
-    double s_distance = sf_s_predicted - s;
-    double d_distance = abs(sf_d - d);
+    double s_distance = sf_s - s;
+    double d_distance = fabs(sf_d - d);
    
-    
-    if (d_distance < 2) { // car is in the same lane
+    double break_power = 0.1 * forward_distance / s_distance;
+    if (d_distance < 1.8) { // car is in the same lane
       if (s_distance > 0 && s_distance < forward_distance) { // car is ahead
         if (s_min > s_distance || s_min < 0) { // is closest
           s_min = s_distance;
-          safe_speed = sf_v;
+          safe_speed = sf_v - break_power;
         }
       }
     }
@@ -77,6 +77,13 @@ double target_lane_safe_speed(double s, double d, double v, double delta_t,
   
 }
 
+/**
+ * This cost penalises left and write lanes make car more likely to maneuver via central lane 
+ */
+double road_position_cost(double d) {
+  return abs(d - 6) / 12;
+}
+
 
 /** 
  * calculates the cost associated with the colision with other cars
@@ -87,34 +94,40 @@ double target_lane_safe_speed(double s, double d, double v, double delta_t,
  *   we want to make sure that no other cars are predicted to be in 5m range
  *   behind or ahead of this trajectory for it to be safe
  */
-double colision_cost(vector<vector <double> > trajectory, vector<vector <double> > predictions) {
+double colision_cost(vector<vector <double> > trajectory, double target_d, vector<vector <double> > predictions) {
   double d, s;
   double cost, cost_front, cost_behind, max_cost = -1;
   vector <double> trajectory_s = trajectory[0];
   vector <double> trajectory_d = trajectory[1];
   
-  double car_d = trajectory_d[trajectory_d.size() -1];
+  double car_d_max = trajectory_d[trajectory_d.size() -1];
+  double car_d_min = trajectory_d[0];
   double car_s_min = trajectory_s[0];
   double car_s_max = trajectory_s[trajectory_s.size() -1];
   
-  
+
   for (int i = 0; i < predictions.size(); i++) {
     cost = 0;
     d = predictions[i][2];
     s = predictions[i][1];
     
-    if (fabs(car_d - d) > 2.8) { // vehicle is not in the same lane as trajectory target
+   
+    
+    if (fabs(target_d - d) > 1.8) { // vehicle is not in the same lane as trajectory target
       continue;
     }
     
-    double distance = abs(car_s_max - s);
- 
-    if (car_s_min - 10 < s && car_s_max + 5 > s) { // car is inside the trajectory 
+    double distance_front = fabs(car_s_max - s);
+    double car_d_change = abs(car_d_min - target_d);
+    if (car_d_change < 0.5) {
+      cost = 0;
+    }
+    // TODO: here we need to know what is the distance that is covered by he existnig trajectory
+    else if (car_s_min - 5 < s && car_s_max > s) { // car is inside the trajectory 
       cost = 1; 
     }
-    
-    else if (distance < 10) {
-      cost = (10 - distance) / 10;
+    else if (distance_front < 10) {
+      cost = (10 - distance_front) / 10;
     }
     
     if (max_cost < cost || max_cost < 0) {
@@ -126,7 +139,7 @@ double colision_cost(vector<vector <double> > trajectory, vector<vector <double>
 
 
 double target_lane_switch_cost(double car_d, double target_d) {
-  double change = abs(car_d - target_d);
+  double change = fabs(car_d - target_d);
   return  change >=4 ? 1 : change / 4;
 }
 
@@ -185,7 +198,7 @@ double trajectory_jerk(vector<vector <double> > trajectory, double delta_t) {
   vector<double> jx = j[0];
   vector<double> jy = j[1];
 
-  double delta_a, abs_j, max_j = -1;
+  double abs_j, max_j = -1;
   for (int i = 0; i < jx.size(); i++) {
     abs_j = sqrt(pow(jx[i], 2) + pow(jy[i], 2));
    
@@ -206,7 +219,7 @@ double trajectory_jerk_cost(double jerk) {
   }
 }
 
-double trajectory_cost(vector<vector <double> > trajectory, double ref_d, double target_speed, double delta_t, 
+double trajectory_cost(vector<vector <double> > trajectory, double target_d, double safe_speed, double target_speed, double delta_t, 
                        vector<vector<double> > sensor_fusion,
                        vector<double> map_waypoints_x,
                        vector<double> map_waypoints_y) {
@@ -226,6 +239,7 @@ double trajectory_cost(vector<vector <double> > trajectory, double ref_d, double
     ref_point_y - ref_point_prev_y, 
     ref_point_x - ref_point_prev_x
   );
+
   
   // std::cout << "Experimental trajectory coordinates: x, y, theta: " 
   //   << ref_point_x << ", " 
@@ -262,41 +276,33 @@ double trajectory_cost(vector<vector <double> > trajectory, double ref_d, double
   vector<vector <double> > prediction = predict_sensor_fusion(sensor_fusion, predict_detla_t);
   double colision = colision_cost(
     trajectory_frenet,
+    target_d,
     prediction
   );
   
-  // std::cout << "Experimental colision cost. " << std::endl 
-  //           << "  Ref s: " << trajectory_ref_s << "," << std::endl
-  //           << "  Ref d: " << trajectory_ref_d << "," << std::endl
-  //           << "  Colision cost: " << colision << std::endl;
- 
-  
-  // for (int i = 0; i < prediction.size(); i++) {
-  //   std::cout << "    car " << i << ": " << prediction[i][1] << "," << prediction[i][2] << std::endl;
-  // }
-  
-  double safe_speed = target_lane_safe_speed(
-    trajectory_s[trajectory_s.size() -1], 
-    trajectory_d[trajectory_d.size() -1], 
-    target_speed, predict_detla_t, sensor_fusion, 50
-  );
-  
+  double trajectory_ref_s = trajectory_s[trajectory_s.size() -1];
+  double trajectory_ref_d = trajectory_d[trajectory_d.size() -1];
+
   double speed_cost = car_speed_cost(target_speed, safe_speed);
   double acceleration = trajectory_acceleration(trajectory, delta_t);
   double acceleration_cost = trajectory_acceleration_cost(acceleration);
   double jerk = trajectory_jerk(trajectory, delta_t);
   double jerk_cost = trajectory_jerk_cost(jerk);
+  double position_cost = road_position_cost(trajectory_ref_d);
   std::cout << "Experimental trajectory speed cost. " << std::endl
+            << "  Ref s: " << trajectory_ref_s << "," << std::endl
+            << "  Ref d: " << trajectory_ref_d << "," << std::endl
             << "  Target speed: " << target_speed << "," << std::endl
             << "  Safe speed: " << safe_speed << "," << std::endl
+            << "  Colision cost: " << colision << std::endl
             << "  Speed cost: " << speed_cost << std::endl
             << "  Max Acceleration (cost)" << acceleration << "(" << acceleration_cost << ")" << std::endl
             << "  Max Jerk (cost)" << jerk << "(" << jerk_cost << ")" << std::endl;
-  double lane_switch_cost = target_lane_switch_cost(frenet[1], ref_d);
-  return 20 * colision +
-    5 * speed_cost + 
-    lane_switch_cost * 0.1 + 
-    acceleration_cost + 
-    jerk_cost;
+  double lane_switch_cost = target_lane_switch_cost(frenet[1], target_d);
+  return 
+    100.0 * colision +
+    20.0 * speed_cost + 
+    // 1.0 * lane_switch_cost +
+    2.0 * position_cost;
   
 }
